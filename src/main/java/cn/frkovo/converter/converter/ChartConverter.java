@@ -127,7 +127,7 @@ public class ChartConverter {
                 }
             }
         }
-        newChart.put("events", eventsArray);
+        newChart.put("effects", eventsArray);
         
         // Write chart JSON
         String fileName = difficulty + ".rmcc";
@@ -332,7 +332,7 @@ public class ChartConverter {
     
     private JSONObject convertEffectToJson(NewEffect effect) {
         JSONObject json = new JSONObject();
-        json.put("eventType", effect.getEventType());
+        json.put("effectType", effect.getEventType());
         json.put("beat", effect.getBeat());
         json.put("properties", effect.getProperties());
         return json;
