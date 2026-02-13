@@ -62,6 +62,7 @@ public class EffectTypeMapper {
             case "VISIBLE" -> mapVisible(oldEffect, beat);
             case "TEXT" -> mapText(oldEffect, beat);
             case "TRANSFORMATIONS" -> mapTransformations(oldEffect, beat);
+            case "TRAN SFORMATIONS" -> mapTransformations(oldEffect, beat);
             case "SPEED", "JUDGEDOT" -> null;  // Skip these effects
             default -> {
                 // Log unknown effect type but don't skip

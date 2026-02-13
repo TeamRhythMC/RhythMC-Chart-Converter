@@ -35,4 +35,12 @@ public class NewNote {
         arr.add(scaleZ);
         return arr;
     }
+    
+    public JSONArray toRotationArray() {
+        JSONArray arr = new JSONArray();
+        arr.add(rotationX);
+        arr.add(rotationY);
+        arr.add(rotationZ);
+        return arr;
+    }
 }

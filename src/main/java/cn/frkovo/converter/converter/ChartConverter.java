@@ -27,10 +27,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * Converts old chart format to new chart format
@@ -100,7 +97,7 @@ public class ChartConverter {
         metadata.put("unlockVoid", new ArrayList<>());
         
         // Write metadata.yml
-        try (FileWriter writer = new FileWriter(outputFolder.resolve("metadata.yml").toFile())) {
+        try (FileWriter writer = new FileWriter(outputFolder.resolve("manifest.yml").toFile())) {
             yaml.dump(metadata, writer);
         }
     }
@@ -133,7 +130,7 @@ public class ChartConverter {
         newChart.put("events", eventsArray);
         
         // Write chart JSON
-        String fileName = difficulty + ".json";
+        String fileName = difficulty + ".rmcc";
         Files.writeString(outputFolder.resolve(fileName), newChart.toJSONString(JSONWriter.Feature.PrettyFormat));
     }
     
@@ -179,7 +176,7 @@ public class ChartConverter {
         meta.put("charters", charters);
         
         // Level
-        meta.put("level", old != null && old.getLevel() > 0 ? old.getLevel() : 1.0);
+        meta.put("level", old != null && old.getLevel() > 0 ? Math.round(old.getLevel() * 10.0) / 10.0 : 1.0); // round to 1 decimal place
         
         // Offset (convert ticks to milliseconds)
         meta.put("offset", old != null ? old.getOffset() * 50L : 0L);
@@ -211,7 +208,7 @@ public class ChartConverter {
         if (old != null && old.getInitial_arena() != null) {
             meta.put("initialArena", old.getInitial_arena());
         }
-        
+        meta.remove("flow-speed"); // Remove flow-speed as it's deprecated
         return meta;
     }
     
@@ -247,7 +244,7 @@ public class ChartConverter {
         }
         
         // Sort notes by beat
-        mainTrack.getNotes().sort((a, b) -> Double.compare(a.getBeat(), b.getBeat()));
+        mainTrack.getNotes().sort(Comparator.comparingDouble(NewNote::getBeat));
         
         List<NewTrack> tracks = new ArrayList<>();
         tracks.add(mainTrack);
@@ -329,6 +326,7 @@ public class ChartConverter {
         json.put("beat", note.getBeat());
         json.put("pos", note.toPosArray());
         json.put("scale", note.toScaleArray());
+        json.put("rotation", note.toRotationArray());
         return json;
     }
     

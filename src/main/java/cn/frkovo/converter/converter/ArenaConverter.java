@@ -82,7 +82,7 @@ public class ArenaConverter {
         manifest.put("unlock-method", unlockMethod);
         
         // Write manifest.yml
-        Path manifestPath = outputFolder.resolve("manifest.yml");
+        Path manifestPath = outputFolder.resolve("metadata.yml");
         try (FileWriter writer = new FileWriter(manifestPath.toFile())) {
             yaml.dump(manifest, writer);
         }
