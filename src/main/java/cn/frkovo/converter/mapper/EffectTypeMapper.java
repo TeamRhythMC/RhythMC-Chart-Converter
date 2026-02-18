@@ -278,7 +278,7 @@ public class EffectTypeMapper {
             props.put("content", old.getContent());
         }
         if (old.getDuration() != null) {
-            props.put("duration", old.getDuration());
+            props.put("duration", old.getDuration() * 50);
         }
         
         return new NewEffect("TEXT_DISPLAY_EFFECT", beat, props);

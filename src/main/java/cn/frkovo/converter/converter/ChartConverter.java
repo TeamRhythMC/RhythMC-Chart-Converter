@@ -64,7 +64,7 @@ public class ChartConverter {
             File chartFile = new File(chartFolder, difficultyFile);
             if (chartFile.exists()) {
                 OldChart oldChart = OldChart.fromFile(chartFile);
-                convertChart(oldChart, difficultyFile.replace(".json", ""), outputFolder);
+                convertChart(oldMetadata, oldChart, difficultyFile.replace(".json", ""), outputFolder);
             }
         }
         
@@ -102,7 +102,7 @@ public class ChartConverter {
         }
     }
     
-    private void convertChart(OldChart oldChart, String difficulty, Path outputFolder) throws IOException {
+    private void convertChart(OldMetadata om, OldChart oldChart, String difficulty, Path outputFolder) throws IOException {
         JSONObject newChart = new JSONObject();
         
         // Convert meta
@@ -113,7 +113,7 @@ public class ChartConverter {
         List<NewTrack> tracks = convertFramesToTracks(oldChart.getFrames());
         JSONArray tracksArray = new JSONArray();
         for (NewTrack track : tracks) {
-            tracksArray.add(convertTrackToJson(track));
+            tracksArray.add(convertTrackToJson(om.getLength(), track));
         }
         newChart.put("tracks", tracksArray);
         
@@ -234,9 +234,9 @@ public class ChartConverter {
             for (OldFrame frame : frames) {
                 if (frame.getNotes() != null) {
                     for (OldNote oldNote : frame.getNotes()) {
-                        NewNote newNote = convertNote(oldNote, frame.getJudgeTick());
-                        if (newNote != null) {
-                            mainTrack.getNotes().add(newNote);
+                        List<NewNote> newNotes = convertNote(oldNote, frame.getJudgeTick());
+                        if (newNotes != null) {
+                            mainTrack.getNotes().addAll(newNotes);
                         }
                     }
                 }
@@ -251,46 +251,92 @@ public class ChartConverter {
         return tracks;
     }
     
-    private NewNote convertNote(OldNote old, long judgeTick) {
+    /**
+     * Convert old note to new note(s).
+     * HOLD notes are expanded to multiple notes from beat to beat+length (one per beat).
+     * Other note types return a single note.
+     */
+    private List<NewNote> convertNote(OldNote old, long judgeTick) {
         if (old == null) {
             return null;
         }
         
-        NewNote note = new NewNote();
-        note.setNoteType(NoteTypeMapper.map(old.getType()));
-        note.setBeat(judgeTick);  // tick = beat when BPM = 1200
-        note.setPosX(old.getPosX());
-        note.setPosY(old.getPosY());
-        note.setPosZ(0);
+        List<NewNote> result = new ArrayList<>();
+        int noteType = NoteTypeMapper.map(old.getType());
         
-        return note;
+        // For HOLD notes, expand to multiple notes with default position (0, -1, 0)
+        if (noteType == NoteTypeMapper.HOLD && old.getLength() != null && old.getLength() > 0) {
+            int length = old.getLength();
+            for (int i = 0; i <= length; i++) {
+                NewNote note = new NewNote();
+                note.setNoteType(noteType);
+                note.setBeat(judgeTick + i);  // tick = beat when BPM = 1200
+                note.setPosX(0);
+                note.setPosY(-1);
+                note.setPosZ(0);
+                result.add(note);
+            }
+        } else {
+            // For non-HOLD notes, return single note
+            NewNote note = new NewNote();
+            note.setNoteType(noteType);
+            note.setBeat(judgeTick);  // tick = beat when BPM = 1200
+            note.setPosX(old.getPosX());
+            note.setPosY(old.getPosY());
+            note.setPosZ(0);
+            result.add(note);
+        }
+        
+        return result;
     }
     
-    private JSONObject convertTrackToJson(NewTrack track) {
+    private JSONObject convertTrackToJson(int l ,NewTrack track) {
         JSONObject json = new JSONObject();
         json.put("id", track.getId());
         
-        // Speed events
+        // Speed events - default: speed 1.0 from start to end
         JSONArray speedEvents = new JSONArray();
-        for (NewNumEvent event : track.getSpeedEvents()) {
-            speedEvents.add(convertNumEventToJson(event));
-        }
+        speedEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 1.0f, 1.0f, 0)));
         json.put("speedEvents", speedEvents);
         
-        // Transform events
-        json.put("xTransformEvents", convertNumEventsToJson(track.getXTransformEvents()));
-        json.put("yTransformEvents", convertNumEventsToJson(track.getYTransformEvents()));
-        json.put("zTransformEvents", convertNumEventsToJson(track.getZTransformEvents()));
+        // Transform events - default: position 0 from start to end
+        JSONArray xTransformEvents = new JSONArray();
+        xTransformEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("xTransformEvents", xTransformEvents);
         
-        // Rotate events
-        json.put("xRotateEvents", convertNumEventsToJson(track.getXRotateEvents()));
-        json.put("yRotateEvents", convertNumEventsToJson(track.getYRotateEvents()));
-        json.put("zRotateEvents", convertNumEventsToJson(track.getZRotateEvents()));
+        JSONArray yTransformEvents = new JSONArray();
+        yTransformEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("yTransformEvents", yTransformEvents);
         
-        // Scale events
-        json.put("xScaleEvents", convertNumEventsToJson(track.getXScaleEvents()));
-        json.put("yScaleEvents", convertNumEventsToJson(track.getYScaleEvents()));
-        json.put("zScaleEvents", convertNumEventsToJson(track.getZScaleEvents()));
+        JSONArray zTransformEvents = new JSONArray();
+        zTransformEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("zTransformEvents", zTransformEvents);
+        
+        // Rotate events - default: rotation 0 from start to end
+        JSONArray xRotateEvents = new JSONArray();
+        xRotateEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("xRotateEvents", xRotateEvents);
+        
+        JSONArray yRotateEvents = new JSONArray();
+        yRotateEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("yRotateEvents", yRotateEvents);
+        
+        JSONArray zRotateEvents = new JSONArray();
+        zRotateEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 0.0f, 0.0f, 0)));
+        json.put("zRotateEvents", zRotateEvents);
+        
+        // Scale events - default: scale 1.0 from start to end
+        JSONArray xScaleEvents = new JSONArray();
+        xScaleEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 1.0f, 1.0f, 0)));
+        json.put("xScaleEvents", xScaleEvents);
+        
+        JSONArray yScaleEvents = new JSONArray();
+        yScaleEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 1.0f, 1.0f, 0)));
+        json.put("yScaleEvents", yScaleEvents);
+        
+        JSONArray zScaleEvents = new JSONArray();
+        zScaleEvents.add(convertNumEventToJson(new NewNumEvent(0, l, 1.0f, 1.0f, 0)));
+        json.put("zScaleEvents", zScaleEvents);
         
         // Notes
         JSONArray notes = new JSONArray();

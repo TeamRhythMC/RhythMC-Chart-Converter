@@ -21,4 +21,11 @@ public class NewNumEvent {
         this.startValue = value;
         this.endValue = value;
     }
+    public NewNumEvent(double startBeat, double endBeat, double startValue, double endValue, int easing) {
+        this.startBeat = startBeat;
+        this.endBeat = endBeat;
+        this.startValue = startValue;
+        this.endValue = endValue;
+        this.easing = easing;
+    }
 }
