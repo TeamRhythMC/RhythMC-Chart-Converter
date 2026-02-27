@@ -7,6 +7,8 @@ import cn.frkovo.converter.model.old.OldEffect;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
+import java.util.UUID;
 
 /**
  * Maps old effect types to new effect types
@@ -79,6 +81,10 @@ public class EffectTypeMapper {
         JSONArray location = new JSONArray();
         if (old.getHologramLoc() != null) {
             location = old.getHologramLoc();
+            location.set(1, location.getFloat(1) + 0.5f);
+            if(location.size() < 3){
+                location.add(0.0f);
+            }
         } else {
             location.add(0.0);
             location.add(1.5);
@@ -87,7 +93,7 @@ public class EffectTypeMapper {
         props.put("location", location);
         
         // ID
-        String id = old.getId() != null ? old.getId() : "RhyMCGameHologram_" + System.currentTimeMillis();
+        String id = old.getId() != null ? old.getId() : "RhyMCGameHologram_" + UUID.randomUUID().toString().replace("-","");
         props.put("id", id);
         
         // Contents
@@ -151,9 +157,11 @@ public class EffectTypeMapper {
     
     private static NewEffect mapClearEffect(OldEffect old, double beat) {
         JSONObject props = new JSONObject();
+        JSONArray effects = new JSONArray();
         if (old.getEffectId() != null) {
-            props.put("effectId", mapPotionEffectId(old.getEffectId()));
+            effects.add(mapPotionEffectId(old.getEffectId()));
         }
+        props.put("effects", effects);
         return new NewEffect("CLEAR_EFFECT", beat, props);
     }
     
@@ -222,66 +230,141 @@ public class EffectTypeMapper {
     private static NewEffect mapText(OldEffect old, double beat) {
         JSONObject props = new JSONObject();
         props.put("id", old.getId() != null ? old.getId() : "text_" + System.currentTimeMillis());
-        props.put("text", old.getContent());
+        props.put("text", old.getContent());  // Changed from "content" to "text"
         
         // Position
         JSONArray position = new JSONArray();
         if (old.getLoc() != null) {
             position = old.getLoc();
         } else {
-            position.add(0.0);
-            position.add(1.5);
-            position.add(0.0);
+            position.add(0.0f);
+            position.add(1.5f);
+            position.add(0.0f);
         }
         props.put("position", position);
         
-        // Default rotation and scale
+        // Rotation
         JSONArray rotation = new JSONArray();
-        rotation.add(0.0);
-        rotation.add(0.0);
-        rotation.add(0.0);
+        rotation.add(0.0f);
+        rotation.add(0.0f);
+        rotation.add(0.0f);
         props.put("rotation", rotation);
         
+        // Scale
         JSONArray scale = new JSONArray();
-        scale.add(1.0);
-        scale.add(1.0);
-        scale.add(1.0);
+        scale.add(1.0f);
+        scale.add(1.0f);
+        scale.add(1.0f);
         props.put("scale", scale);
         
         return new NewEffect("TEXT_DISPLAY", beat, props);
     }
     
     private static NewEffect mapTransformations(OldEffect old, double beat) {
+        String transformationType = old.getType();
+        
+        // If type is REMOVE, map to TEXT_DISPLAY_REMOVE
+        if ("REMOVE".equalsIgnoreCase(transformationType)) {
+            JSONObject props = new JSONObject();
+            props.put("id", old.getId());
+            return new NewEffect("TEXT_DISPLAY_REMOVE", beat, props);
+        }
+        
+        // Map old type to new TextSpecialEffect type
+        String newType = mapTextSpecialEffectType(transformationType);
+        
+        // Otherwise, map to TEXT_DISPLAY_EFFECT
         JSONObject props = new JSONObject();
         props.put("id", old.getId());
-        props.put("type", old.getType());
+        props.put("type", newType);
         
-        if (old.getTo() != null) {
-            props.put("to", old.getTo());
+        // Handle different types
+        switch (newType) {
+            case "BACKGROUND_COLOR" -> {
+                if (old.getBackgroundColor() != null) {
+                    props.put("color", old.getBackgroundColor());
+                }
+            }
+            case "SHADOW" -> {
+                if (old.getShadow() != null) {
+                    props.put("shadowed", old.getShadow());
+                }
+            }
+            case "GLOWING" -> {
+                // No additional properties needed
+            }
+            case "TEXT" -> {
+                if (old.getContent() != null) {
+                    props.put("text", old.getContent());
+                }
+            }
+            case "OPACITY" -> {
+                if (old.getTo() != null && !old.getTo().isEmpty()) {
+                    props.put("targetOpacity", old.getTo().getFloat(0));
+                }
+            }
+            case "LINEAR_TRANSFORMATION" -> {
+                // Position (to)
+                if (old.getTo() != null) {
+                    props.put("position", old.getTo());
+                } else {
+                    JSONArray pos = new JSONArray();
+                    pos.add(0.0f);
+                    pos.add(0.0f);
+                    pos.add(0.0f);
+                    props.put("position", pos);
+                }
+                // Rotation
+                JSONArray rotation = new JSONArray();
+                if (old.getRotate() != null) {
+                    rotation.add(0.0f);
+                    rotation.add(0.0f);
+                    rotation.add(old.getRotate().floatValue());
+                } else {
+                    rotation.add(0.0f);
+                    rotation.add(0.0f);
+                    rotation.add(0.0f);
+                }
+                props.put("rotation", rotation);
+                // Scale
+                JSONArray scale = new JSONArray();
+                if (old.getScale() != null) {
+                    scale.add(old.getScale());
+                    scale.add(old.getScale());
+                    scale.add(old.getScale());
+                } else {
+                    scale.add(1.0f);
+                    scale.add(1.0f);
+                    scale.add(1.0f);
+                }
+                props.put("scale", scale);
+            }
         }
-        if (old.getRotate() != null) {
-            props.put("rotate", old.getRotate());
-        }
-        if (old.getScale() != null) {
-            props.put("scale", old.getScale());
-        }
-        if (old.getShadow() != null) {
-            props.put("shadow", old.getShadow());
-        }
-        if (old.getGlowing() != null) {
-            props.put("glowing", old.getGlowing());
-        }
-        if (old.getBackgroundColor() != null) {
-            props.put("color", old.getBackgroundColor());
-        }
-        if (old.getContent() != null) {
-            props.put("content", old.getContent());
-        }
+        
         if (old.getDuration() != null) {
-            props.put("duration", old.getDuration() * 50);
+            props.put("duration", old.getDuration() * 50L);
         }
         
         return new NewEffect("TEXT_DISPLAY_EFFECT", beat, props);
+    }
+    
+    /**
+     * Maps old TRANSFORMATIONS type to new TextSpecialEffect type
+     */
+    private static String mapTextSpecialEffectType(String oldType) {
+        if (oldType == null) {
+            return "LINEAR_TRANSFORMATION";
+        }
+        
+        return switch (oldType.toUpperCase()) {
+            case "TRANSFORMATION" -> "LINEAR_TRANSFORMATION";
+            case "OPACITY" -> "OPACITY";
+            case "BACKGROUND_COLOR" -> "BACKGROUND_COLOR";
+            case "SHADOW" -> "SHADOW";
+            case "GLOWING" -> "GLOWING";
+            case "TEXT" -> "TEXT";
+            default -> "LINEAR_TRANSFORMATION";
+        };
     }
     
     /**
@@ -292,7 +375,7 @@ public class EffectTypeMapper {
         if (effectId == null) {
             return 1;  // Default to SPEED
         }
-        
+
         return switch (effectId.toUpperCase()) {
             case "SPEED" -> 1;
             case "SLOWNESS", "SLOW" -> 2;
@@ -302,6 +385,7 @@ public class EffectTypeMapper {
             case "INSTANT_HEALTH" -> 6;
             case "INSTANT_DAMAGE" -> 7;
             case "JUMP_BOOST" -> 8;
+            case "JUMP" -> 8;
             case "NAUSEA" -> 9;
             case "REGENERATION" -> 10;
             case "RESISTANCE" -> 11;

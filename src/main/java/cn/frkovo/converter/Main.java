@@ -2,6 +2,7 @@ package cn.frkovo.converter;
 
 import cn.frkovo.converter.converter.ChartConverter;
 import cn.frkovo.converter.converter.ArenaConverter;
+import cn.frkovo.converter.converter.ResourcePackConverter;
 import cn.frkovo.converter.util.UUIDResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +12,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
@@ -31,6 +34,9 @@ public class Main {
     private static int currentSongId = START_SONG_ID;
     private static UUIDResolver uuidResolver;
     
+    // SHA to songId mapping for resource pack conversion
+    private static final Map<String, Integer> shaToSongIdMap = new HashMap<>();
+    
     public static void main(String[] args) {
         logger.info("=== RhythMC Chart Converter v1.0 ===");
         logger.info("Converting charts from {} to {}", INPUT_DIR, OUTPUT_DIR);
@@ -47,6 +53,9 @@ public class Main {
             
             // Convert arenas
             convertArenas();
+            
+            // Convert resource packs
+            convertResourcePacks();
             
             logger.info("=== Conversion Complete ===");
         } catch (Exception e) {
@@ -90,8 +99,15 @@ public class Main {
                 .filter(Files::isDirectory)
                 .forEach(folder -> {
                     try {
-                        logger.info("Converting chart: {}", folder.getFileName());
-                        chartConverter.convert(folder.toFile(), currentSongId++);
+                        String sha = folder.getFileName().toString();
+                        logger.info("Converting chart: {}", sha);
+                        boolean success = chartConverter.convert(folder.toFile(), currentSongId);
+                        
+                        if (success) {
+                            // Record SHA to songId mapping for resource pack conversion
+                            shaToSongIdMap.put(sha, currentSongId);
+                            currentSongId++;
+                        }
                     } catch (Exception e) {
                         logger.error("Failed to convert chart: {}", folder.getFileName(), e);
                     }
@@ -126,6 +142,33 @@ public class Main {
         }
         
         logger.info("Converted {} arenas", arenaConverter.getNextArenaId() - START_ARENA_ID);
+    }
+    
+    private static void convertResourcePacks() throws IOException {
+        Path rmcBDir = Paths.get(INPUT_DIR, "rmc-b");
+        
+        if (!Files.exists(rmcBDir)) {
+            logger.warn("Resource pack input directory not found: {}", rmcBDir);
+            return;
+        }
+        
+        if (shaToSongIdMap.isEmpty()) {
+            logger.warn("No charts converted, skipping resource pack conversion");
+            return;
+        }
+        
+        // Create output directory for resource pack
+        Path resourcePackOutput = Paths.get(OUTPUT_DIR);
+        Files.createDirectories(resourcePackOutput);
+
+        ResourcePackConverter resourcePackConverter = new ResourcePackConverter(shaToSongIdMap);
+        
+        try {
+            Path outputZip = resourcePackConverter.convert(rmcBDir, resourcePackOutput);
+            logger.info("Created combined resource pack: {}", outputZip);
+        } catch (Exception e) {
+            logger.error("Failed to convert resource packs", e);
+        }
     }
     
     public static String getOutputDir() {

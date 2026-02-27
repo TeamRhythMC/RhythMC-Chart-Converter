@@ -4,6 +4,8 @@ import com.alibaba.fastjson2.JSONArray;
 import com.alibaba.fastjson2.JSONObject;
 import lombok.Data;
 
+import java.util.Objects;
+
 /**
  * Old format note model
  */
@@ -18,12 +20,16 @@ public class OldNote {
         OldNote note = new OldNote();
         note.setType(json.getString("type"));
         
-        JSONArray pos = json.getJSONArray("pos");
-        if (pos != null && pos.size() >= 2) {
-            note.setPosX(pos.getFloatValue(0));
-            note.setPosY(pos.getFloatValue(1));
+        if(Objects.equals(note.getType(), "NOTE_HOLD")){
+            note.setPosX(json.getFloat("pos"));
+            note.setPosY(-1);
+        }else{
+            JSONArray pos = json.getJSONArray("pos");
+            if (pos != null && pos.size() >= 2) {
+                note.setPosX(pos.getFloatValue(0));
+                note.setPosY(pos.getFloatValue(1));
+            }
         }
-        
         note.setLength(json.getInteger("length"));
         return note;
     }

@@ -2,6 +2,9 @@ package cn.frkovo.converter.converter;
 
 import cn.frkovo.converter.Main;
 import cn.frkovo.converter.model.old.OldArena;
+import net.querz.nbt.io.NBTUtil;
+import net.querz.nbt.io.NamedTag;
+import net.querz.nbt.tag.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.DumperOptions;
@@ -51,7 +54,7 @@ public class ArenaConverter {
         arenaName = arenaName.toLowerCase();
         
         // Create output folder: arena-id
-        String folderName = String.valueOf(arenaId);
+        String folderName = arenaName;
         Path outputFolder = Path.of(Main.getOutputDir(), "Arenas", folderName);
         Files.createDirectories(outputFolder);
         
@@ -80,7 +83,13 @@ public class ArenaConverter {
         // Unlock method
         List<Map<String, Object>> unlockMethod = createUnlockMethod(oldArena, arenaName);
         manifest.put("unlock-method", unlockMethod);
-        
+        //read schematic
+        int[] xyz = readXYZaOffset(new File(schematicsFolder, oldArena.getSchematicFile()));
+        Map<String, Object> schematicInfo = new HashMap<>();
+        schematicInfo.put("dimensions", List.of(xyz[0], xyz[1], xyz[2]));
+        schematicInfo.put("offset", List.of(xyz[3], xyz[4], xyz[5]));
+        manifest.put("schematic-info", schematicInfo);
+
         // Write manifest.yml
         Path manifestPath = outputFolder.resolve("metadata.yml");
         try (FileWriter writer = new FileWriter(manifestPath.toFile())) {
@@ -105,12 +114,52 @@ public class ArenaConverter {
             logger.warn("Schematic file not found: {}", schematicFileName);
             return;
         }
-        
+
         // Copy schematic file to output folder with arena name
         Path destPath = outputFolder.resolve(arenaName + ".schem");
         Files.copy(schematicFile.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
     }
-    
+    private int[] readXYZaOffset(File datFile) throws IOException {
+        NamedTag namedTag = NBTUtil.read(datFile);
+        int[] expected = new int[]{0, 0, 0, 0, 0, 0};
+        CompoundTag t = (CompoundTag) namedTag.getTag();
+        CompoundTag t2 = (CompoundTag) t.get("Schematic");
+        if( t2 != null) {
+            Tag<?> nameTag = t2.get("Width");
+            if (nameTag instanceof ShortTag) {
+                 expected[0] = ((ShortTag) nameTag).asShort();
+            }
+            Tag<?> nameTag2 = t2.get("Height");
+            if (nameTag instanceof ShortTag) {
+                 expected[1] = ((ShortTag) nameTag2).asShort();
+            }
+            Tag<?> nameTag3 = t2.get("Length");
+            if (nameTag instanceof ShortTag) {
+                 expected[2] = ((ShortTag) nameTag3).asShort();
+            }
+            CompoundTag t3 = (CompoundTag) t2.get("Metadata");
+            CompoundTag t4 = (CompoundTag) t3.get("WorldEdit");
+            Tag<?> nameTag1 = t4.get("Offset");
+            if(nameTag1 instanceof ListTag listTag) {
+                if (listTag.size() == 3) {
+                    expected[3] = ((IntTag) listTag.get(0)).asInt();
+                    expected[4] = ((IntTag) listTag.get(1)).asInt();
+                    expected[5] = ((IntTag) listTag.get(2)).asInt();
+                }
+            }
+        }
+
+        return expected;
+    }
+    private short[] readOFFSET(File datFile) throws IOException {
+        NamedTag namedTag = NBTUtil.read(datFile);
+        short[] expected = new short[]{0, 0, 0};
+        CompoundTag t = (CompoundTag) namedTag.getTag();
+        CompoundTag t1 = (CompoundTag) t.get("Schematic");
+
+
+        return expected;
+    }
     private List<Map<String, Object>> createUnlockMethod(OldArena oldArena, String arenaName) {
         List<Map<String, Object>> unlockMethods = new ArrayList<>();
         

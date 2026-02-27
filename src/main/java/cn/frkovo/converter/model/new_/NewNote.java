@@ -19,6 +19,7 @@ public class NewNote {
     private float rotationX = 0.0f;
     private float rotationY = 0.0f;
     private float rotationZ = 0.0f;
+    private int holdGroup = -1;  // -1 = not part of any hold, >=0 = group ID for HOLD notes
     
     public JSONArray toPosArray() {
         JSONArray arr = new JSONArray();

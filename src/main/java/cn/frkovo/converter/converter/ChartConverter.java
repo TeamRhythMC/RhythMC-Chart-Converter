@@ -41,15 +41,36 @@ public class ChartConverter {
     // BPM setting
     private static final double BPM = 1200.0;
     
-    public void convert(File chartFolder, int songId) throws IOException {
+    // Counter for generating unique holdGroup IDs
+    private int holdGroupCounter = 0;
+    
+    /**
+     * Convert a chart folder.
+     * @return true if conversion was successful, false if skipped (no difficulty files)
+     */
+    public boolean convert(File chartFolder, int songId) throws IOException {
         // Read old metadata
         File metadataFile = new File(chartFolder, "metadata.yml");
         if (!metadataFile.exists()) {
             logger.warn("metadata.yml not found in {}", chartFolder.getName());
-            return;
+            return false;
         }
         
         OldMetadata oldMetadata = OldMetadata.fromFile(metadataFile.getAbsolutePath());
+        
+        // Check if any difficulty files exist
+        boolean hasAnyDifficulty = false;
+        for (String difficultyFile : DIFFICULTY_FILES) {
+            if (new File(chartFolder, difficultyFile).exists()) {
+                hasAnyDifficulty = true;
+                break;
+            }
+        }
+        
+        if (!hasAnyDifficulty) {
+            logger.warn("No difficulty files found for chart: {} - skipping", oldMetadata.getName());
+            return false;
+        }
         
         // Create output folder
         String folderName = String.valueOf(songId);
@@ -64,11 +85,12 @@ public class ChartConverter {
             File chartFile = new File(chartFolder, difficultyFile);
             if (chartFile.exists()) {
                 OldChart oldChart = OldChart.fromFile(chartFile);
-                convertChart(oldMetadata, oldChart, difficultyFile.replace(".json", ""), outputFolder);
+                convertChart(songId,oldMetadata, oldChart, difficultyFile.replace(".json", ""), outputFolder);
             }
         }
         
          logger.info("Converted chart: {} -> {}", oldMetadata.getName(), folderName);
+         return true;
     }
     
     private void convertMetadata(OldMetadata old, int songId, Path outputFolder) throws IOException {
@@ -102,11 +124,11 @@ public class ChartConverter {
         }
     }
     
-    private void convertChart(OldMetadata om, OldChart oldChart, String difficulty, Path outputFolder) throws IOException {
+    private void convertChart(int songID,OldMetadata om, OldChart oldChart, String difficulty, Path outputFolder) throws IOException {
         JSONObject newChart = new JSONObject();
         
         // Convert meta
-        JSONObject meta = convertChartMeta(oldChart.getMeta(), difficulty);
+        JSONObject meta = convertChartMeta(songID, oldChart.getMeta(), difficulty);
         newChart.put("meta", meta);
         
         // Convert frames to tracks
@@ -128,13 +150,13 @@ public class ChartConverter {
             }
         }
         newChart.put("effects", eventsArray);
-        
+
         // Write chart JSON
         String fileName = difficulty + ".rmcc";
         Files.writeString(outputFolder.resolve(fileName), newChart.toJSONString(JSONWriter.Feature.PrettyFormat));
     }
     
-    private JSONObject convertChartMeta(OldChartMeta old, String difficulty) {
+    private JSONObject convertChartMeta(int sid, OldChartMeta old, String difficulty) {
         JSONObject meta = new JSONObject();
         
         // Charters - resolve UUIDs to names
@@ -147,7 +169,7 @@ public class ChartConverter {
             } else if (old.getCharter() != null) {
                 String charter = old.getCharter();
                 // Try to resolve UUID to name
-                if (resolver != null && resolver.isUUID(charter)) {
+                if (resolver != null && UUIDResolver.isUUID(charter)) {
                     String resolved = resolver.resolve(charter);
                     charters.add(resolved != null ? resolved : charter);
                 } else {
@@ -156,9 +178,8 @@ public class ChartConverter {
             }
             if (old.getCoop_charters() != null) {
                 for (Object coopCharter : old.getCoop_charters()) {
-                    if (coopCharter instanceof String) {
-                        String coopStr = (String) coopCharter;
-                        if (resolver != null && resolver.isUUID(coopStr)) {
+                    if (coopCharter instanceof String coopStr) {
+                        if (resolver != null && UUIDResolver.isUUID(coopStr)) {
                             String resolved = resolver.resolve(coopStr);
                             charters.add(resolved != null ? resolved : coopStr);
                         } else {
@@ -187,7 +208,7 @@ public class ChartConverter {
         // UID - generate based on difficulty
         // For levels, uid = 1xxxxx + n (world = 1, nether = 2, end = 3, void = 4)
         int diffIndex = getDifficultyIndex(difficulty);
-        meta.put("uid", 100000 + diffIndex);
+        meta.put("uid", sid*10 + diffIndex);
         
         // Comments
         JSONArray comments = new JSONArray();
@@ -253,8 +274,8 @@ public class ChartConverter {
     
     /**
      * Convert old note to new note(s).
-     * HOLD notes are expanded to multiple notes from beat to beat+length (one per beat).
-     * Other note types return a single note.
+     * For HOLD notes, expand to multiple notes with same holdGroup ID.
+     * Other note types return a single note with holdGroup = -1.
      */
     private List<NewNote> convertNote(OldNote old, long judgeTick) {
         if (old == null) {
@@ -264,26 +285,30 @@ public class ChartConverter {
         List<NewNote> result = new ArrayList<>();
         int noteType = NoteTypeMapper.map(old.getType());
         
-        // For HOLD notes, expand to multiple notes with default position (0, -1, 0)
+        // For HOLD notes, expand to multiple notes with holdGroup
         if (noteType == NoteTypeMapper.HOLD && old.getLength() != null && old.getLength() > 0) {
             int length = old.getLength();
+            int holdGroupId = holdGroupCounter++;
+            
             for (int i = 0; i <= length; i++) {
                 NewNote note = new NewNote();
                 note.setNoteType(noteType);
                 note.setBeat(judgeTick + i);  // tick = beat when BPM = 1200
-                note.setPosX(0);
-                note.setPosY(-1);
+                note.setPosX(old.getPosX());
+                note.setPosY(old.getPosY());
                 note.setPosZ(0);
+                note.setHoldGroup(holdGroupId);  // Same group ID for all parts of the HOLD
                 result.add(note);
             }
         } else {
-            // For non-HOLD notes, return single note
+            // For non-HOLD notes, return single note with holdGroup = -1
             NewNote note = new NewNote();
             note.setNoteType(noteType);
             note.setBeat(judgeTick);  // tick = beat when BPM = 1200
             note.setPosX(old.getPosX());
             note.setPosY(old.getPosY());
             note.setPosZ(0);
+            note.setHoldGroup(-1);  // Not part of any hold
             result.add(note);
         }
         
@@ -370,9 +395,16 @@ public class ChartConverter {
         JSONObject json = new JSONObject();
         json.put("noteType", note.getNoteType());
         json.put("beat", note.getBeat());
+        
+        // Only output holdGroup for HOLD notes (holdGroup >= 0)
+        if (note.getHoldGroup() >= 0) {
+            json.put("holdGroup", note.getHoldGroup());
+        }
+        
         json.put("pos", note.toPosArray());
         json.put("scale", note.toScaleArray());
         json.put("rotation", note.toRotationArray());
+        
         return json;
     }
     
